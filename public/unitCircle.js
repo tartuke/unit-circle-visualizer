@@ -1,36 +1,47 @@
-// /public/unitCircle.js
 /**
  * Interactive Unit Circle - A learning tool for Algebra 2 students
  * Visualizes angles, coordinates, and trigonometric functions on the unit circle
+ *
+ * @author Tartuke
+ * @version 1.0.0
  */
 
-// Main class for the Unit Circle component
 class UnitCircle {
-  // Canvas and context
+  /** @type {HTMLCanvasElement} Canvas element */
   canvas;
+  /** @type {CanvasRenderingContext2D} Canvas 2D context */
   ctx;
 
-  // Canvas dimensions and center point
+  /** @type {number} Canvas width in pixels */
   width = 0;
+  /** @type {number} Canvas height in pixels */
   height = 0;
-  centerX = 0; // Canvas X coordinate of the circle's center
-  centerY = 0; // Canvas Y coordinate of the circle's center
-  radius = 0; // Radius in pixels
+  /** @type {number} Canvas X coordinate of the circle's center */
+  centerX = 0;
+  /** @type {number} Canvas Y coordinate of the circle's center */
+  centerY = 0;
+  /** @type {number} Radius of the unit circle in pixels */
+  radius = 0;
 
-  // Special angles data
+  /** @type {Array} Special angles data with exact values */
   specialAngles = [];
 
-  // Interactions state
+  /** @type {boolean} Whether mouse is over the circle */
   isMouseOverCircle = false;
-  mouseCanvasPos = { x: 0, y: 0 }; // Mouse position in Canvas coordinates
-  currentAngle = 0; // Angle in standard math radians (0 right, counter-clockwise)
-  // currentPoint stores CANVAS coordinates for drawing the hover/pinned point
+  /** @type {Object} Mouse position in canvas coordinates */
+  mouseCanvasPos = { x: 0, y: 0 };
+  /** @type {number} Current angle in standard math radians (0 right, counter-clockwise) */
+  currentAngle = 0;
+  /** @type {Object} Current point on circle in canvas coordinates */
   currentPoint = { x: 0, y: 0 };
-  pinnedAngles = []; // Stores { id, angle, point (canvas coords), angleInfo }
+  /** @type {Array} Pinned angles with their data */
+  pinnedAngles = [];
+  /** @type {number} Next ID to assign to a pinned angle */
   nextPinId = 1;
+  /** @type {number|null} Currently selected pin ID */
   selectedPinId = null;
 
-  // Options state (unchanged)
+  /** @type {Object} Display options */
   options = {
     showDegrees: true,
     showRadians: true,
@@ -43,7 +54,7 @@ class UnitCircle {
     showAngleArcs: true,
   };
 
-  // Colors (unchanged)
+  /** @type {Object} Color scheme */
   colors = {
     static: "rgba(136, 136, 136, 1)",
     staticFaded: "rgba(136, 136, 136, 0.2)",
@@ -55,11 +66,11 @@ class UnitCircle {
     referenceArc: "rgba(46, 204, 113, 0.8)",
   };
 
-  // Snap tolerance (unchanged)
+  /** @type {number} Tolerance for snapping to special angles in radians */
   snapTolerance = 0.05;
 
   /**
-   * Constructor (unchanged)
+   * Constructor - Initializes the unit circle visualization
    */
   constructor() {
     this.initCanvas();
@@ -70,14 +81,14 @@ class UnitCircle {
     this.draw();
   }
 
-  // --- Coordinate Transformation ---
+  // ===== COORDINATE TRANSFORMATIONS =====
 
   /**
    * Convert Canvas coordinates (origin top-left, +y down) to
    * Math coordinates (origin at circle center, +y up).
-   * @param {number} canvasX - X coordinate relative to canvas top-left.
-   * @param {number} canvasY - Y coordinate relative to canvas top-left.
-   * @returns {{x: number, y: number}} Math coordinates relative to center.
+   * @param {number} canvasX - X coordinate relative to canvas top-left
+   * @param {number} canvasY - Y coordinate relative to canvas top-left
+   * @returns {{x: number, y: number}} Math coordinates relative to center
    */
   canvasToMath(canvasX, canvasY) {
     const mathX = canvasX - this.centerX;
@@ -88,9 +99,9 @@ class UnitCircle {
   /**
    * Convert Math coordinates (origin at circle center, +y up) to
    * Canvas coordinates (origin top-left, +y down).
-   * @param {number} mathX - X coordinate relative to circle center.
-   * @param {number} mathY - Y coordinate relative to circle center.
-   * @returns {{x: number, y: number}} Canvas coordinates relative to top-left.
+   * @param {number} mathX - X coordinate relative to circle center
+   * @param {number} mathY - Y coordinate relative to circle center
+   * @returns {{x: number, y: number}} Canvas coordinates relative to top-left
    */
   mathToCanvas(mathX, mathY) {
     const canvasX = mathX + this.centerX;
@@ -98,7 +109,11 @@ class UnitCircle {
     return { x: canvasX, y: canvasY };
   }
 
-  // --- Initialization --- (initCanvas, resizeCanvas, initSpecialAngles, getExactTrigString remain the same)
+  // ===== INITIALIZATION =====
+
+  /**
+   * Initialize the canvas element and context
+   */
   initCanvas() {
     this.canvas = document.getElementById("unitCircleCanvas");
     this.ctx = this.canvas.getContext("2d");
@@ -106,6 +121,9 @@ class UnitCircle {
     window.addEventListener("resize", () => this.resizeCanvas());
   }
 
+  /**
+   * Resize the canvas to fit its container and recalculate dimensions
+   */
   resizeCanvas() {
     const container = this.canvas.parentElement;
     const rect = container.getBoundingClientRect();
@@ -119,8 +137,10 @@ class UnitCircle {
     this.draw();
   }
 
+  /**
+   * Initialize the special angles data with exact values
+   */
   initSpecialAngles() {
-    // Definition of specialAngles array... (no changes needed here)
     this.specialAngles = [
       {
         radians: 0,
@@ -219,7 +239,7 @@ class UnitCircle {
         exactCoordsStr: "(√3/2, -1/2)",
       },
     ];
-    // Calculation of trig values... (no changes needed here)
+    // Calculate trigonometric values for each special angle
     this.specialAngles.forEach((angle) => {
       const { x, y } = angle.coords;
       angle.sin = y;
@@ -237,8 +257,12 @@ class UnitCircle {
     });
   }
 
+  /**
+   * Convert a numeric trigonometric value to its exact string representation
+   * @param {number} value - The trigonometric value
+   * @returns {string} The exact string representation
+   */
   getExactTrigString(value) {
-    // No changes needed
     if (value === 0) return "0";
     if (value === 1) return "1";
     if (value === -1) return "-1";
@@ -256,8 +280,11 @@ class UnitCircle {
     return value.toFixed(3); // Default precision
   }
 
-  // --- Event Handling ---
+  // ===== EVENT HANDLING =====
 
+  /**
+   * Set up mouse event listeners for the canvas
+   */
   setupEventListeners() {
     this.canvas.addEventListener("mousemove", (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -327,8 +354,10 @@ class UnitCircle {
     });
   }
 
+  /**
+   * Set up event listeners for UI controls
+   */
   setupControlListeners() {
-    // No changes needed here
     document.getElementById("clearPinsBtn").addEventListener("click", () => {
       this.pinnedAngles = [];
       this.selectedPinId = null;
@@ -393,10 +422,14 @@ class UnitCircle {
       });
   }
 
-  // --- Calculations & Data Handling --- (findClosestSpecialAngle, getCurrentAngleInfo, calculateReferenceAngle, getQuadrant, updateInfoPanel, formatRadians remain the same)
+  // ===== CALCULATIONS & DATA HANDLING =====
 
+  /**
+   * Find the closest special angle to the given angle
+   * @param {number} angle - The angle in radians
+   * @returns {Object|null} The closest special angle or null if none found
+   */
   findClosestSpecialAngle(angle) {
-    // No changes needed
     if (!this.options.snapToAngles) return null;
     let closestAngle = null;
     let minDifference = this.snapTolerance;
@@ -411,8 +444,11 @@ class UnitCircle {
     return closestAngle;
   }
 
+  /**
+   * Get detailed information about the current angle
+   * @returns {Object} Angle information including trig values
+   */
   getCurrentAngleInfo() {
-    // No changes needed, works with this.currentAngle (math angle)
     const closestAngle = this.findClosestSpecialAngle(this.currentAngle);
     if (closestAngle) {
       // Return special angle exact values (already calculated)
@@ -447,8 +483,12 @@ class UnitCircle {
     }
   }
 
+  /**
+   * Calculate the reference angle (angle in first quadrant)
+   * @param {number} angle - The angle in radians
+   * @returns {number} The reference angle in radians
+   */
   calculateReferenceAngle(angle) {
-    // No changes needed
     let refAngle = angle % (2 * Math.PI);
     if (refAngle < 0) refAngle += 2 * Math.PI; // Ensure positive
     if (refAngle >= 0 && refAngle <= Math.PI / 2) return refAngle;
@@ -459,8 +499,12 @@ class UnitCircle {
     return 2 * Math.PI - refAngle;
   }
 
+  /**
+   * Determine which quadrant an angle is in
+   * @param {number} angle - The angle in radians
+   * @returns {string} The quadrant (I, II, III, IV) or axis
+   */
   getQuadrant(angle) {
-    // No changes needed
     const normalizedAngle =
       ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Ensure [0, 2PI)
     if (normalizedAngle === 0 || normalizedAngle === Math.PI) return "X-Axis"; // Or handle axes specifically
@@ -476,8 +520,10 @@ class UnitCircle {
     return "IV";
   }
 
+  /**
+   * Update the information panel with current angle data
+   */
   updateInfoPanel() {
-    // No changes needed, uses getCurrentAngleInfo
     if (!this.isMouseOverCircle && this.selectedPinId === null) return; // Don't update if nothing active
 
     let angleInfo;
@@ -559,8 +605,12 @@ class UnitCircle {
     }
   }
 
+  /**
+   * Format radians as exact fractions of π when possible
+   * @param {number} radians - The angle in radians
+   * @returns {string} Formatted string representation
+   */
   formatRadians(radians) {
-    // No changes needed
     const pi = Math.PI;
     const tolerance = 0.001; // Tolerance for matching fractions
     const fractions = [2, 3, 4, 6]; // Denominators to check
@@ -583,9 +633,12 @@ class UnitCircle {
     return radians.toFixed(2); // Fallback
   }
 
-  // --- Pinned Angle List Management --- (updatePinnedAnglesList, deletePinnedAngle, selectPinnedAngle remain the same)
+  // ===== PINNED ANGLE LIST MANAGEMENT =====
+
+  /**
+   * Update the pinned angles list in the UI
+   */
   updatePinnedAnglesList() {
-    // No changes needed
     const listElement = document.getElementById("pinnedAnglesList");
     listElement.innerHTML = "";
     if (this.pinnedAngles.length === 0) {
@@ -617,8 +670,11 @@ class UnitCircle {
     });
   }
 
+  /**
+   * Delete a pinned angle by its ID
+   * @param {number} id - The ID of the pinned angle to delete
+   */
   deletePinnedAngle(id) {
-    // No changes needed
     this.pinnedAngles = this.pinnedAngles.filter((angle) => angle.id !== id);
     if (id === this.selectedPinId) {
       this.selectedPinId = null;
@@ -628,18 +684,21 @@ class UnitCircle {
     this.draw();
   }
 
+  /**
+   * Select or deselect a pinned angle
+   * @param {number} id - The ID of the pinned angle to select
+   */
   selectPinnedAngle(id) {
-    // No changes needed
     this.selectedPinId = this.selectedPinId === id ? null : id; // Toggle selection
     this.updatePinnedAnglesList();
     this.updateInfoPanel(); // Update panel with selected info
     this.draw();
   }
 
-  // --- Drawing Functions ---
+  // ===== DRAWING FUNCTIONS =====
 
   /**
-   * Main draw loop
+   * Main draw loop - clears and redraws all elements
    */
   draw() {
     this.ctx.clearRect(0, 0, this.width, this.height);
@@ -676,8 +735,10 @@ class UnitCircle {
     }
   }
 
+  /**
+   * Draw the background grid
+   */
   drawGrid() {
-    // No changes needed
     this.ctx.strokeStyle = this.colors.grid;
     this.ctx.lineWidth = 1;
     const gridSize = this.radius / 5;
@@ -697,8 +758,10 @@ class UnitCircle {
     this.ctx.stroke();
   }
 
+  /**
+   * Draw the unit circle
+   */
   drawCircle() {
-    // No changes needed
     this.ctx.strokeStyle = this.colors.static;
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -706,8 +769,10 @@ class UnitCircle {
     this.ctx.stroke();
   }
 
+  /**
+   * Draw the coordinate axes
+   */
   drawAxes() {
-    // No changes needed
     this.ctx.strokeStyle = this.colors.axis;
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -743,7 +808,7 @@ class UnitCircle {
   }
 
   /**
-   * Draw the special angles markers and labels using transformations
+   * Draw the special angles markers and labels
    */
   drawSpecialAngles() {
     const labelDistFactor = 1.15; // Distance factor for labels from center
@@ -817,14 +882,14 @@ class UnitCircle {
   }
 
   /**
-   * Draw pinned angles using stored CANVAS coordinates
+   * Draw all pinned angles
    */
   drawPinnedAngles() {
     if (this.pinnedAngles.length === 0) return;
 
     for (const pin of this.pinnedAngles) {
       // pin.point already stores CANVAS coordinates
-      const { id, angle, point, angleInfo } = pin;
+      const { id, point, angleInfo } = pin;
       const isSelected = id === this.selectedPinId;
 
       // Styles based on selection
@@ -855,7 +920,7 @@ class UnitCircle {
   }
 
   /**
-   * Draw the current angle effects (hover)
+   * Draw the current hover angle effects
    */
   drawCurrentAngle() {
     // this.currentAngle is MATH angle
@@ -896,12 +961,8 @@ class UnitCircle {
   }
 
   /**
-   * Draw the standard angle arc and reference angle arc.
-   * Uses MATH angles for logic but converts to CANVAS angles for drawing.
-   * Includes numeric labels for the angles.
-   * Draws using the canvas default clockwise direction.
-   *
-   * @param {object} angleInfo - Object containing angle details (radians, degrees, etc.)
+   * Draw the standard angle arc and reference angle arc
+   * @param {object} angleInfo - Object containing angle details
    */
   drawAngleArcs(angleInfo) {
     const mathAngle = angleInfo.radians; // Current MATH angle (0 to 2PI)
@@ -1061,8 +1122,10 @@ class UnitCircle {
   }
 
   /**
-   * Draw an angle label near a point.
-   * Takes CANVAS coordinates of the point as input.
+   * Draw an angle label near a point
+   * @param {object} angleInfo - Angle information object
+   * @param {number} canvasPointX - X coordinate in canvas space
+   * @param {number} canvasPointY - Y coordinate in canvas space
    */
   drawHoverAngleLabel(angleInfo, canvasPointX, canvasPointY) {
     // angleInfo contains MATH angle/degrees
@@ -1101,7 +1164,9 @@ class UnitCircle {
   }
 
   /**
-   * Draw reference triangle using CANVAS coordinates.
+   * Draw reference triangle
+   * @param {number} canvasPointX - X coordinate in canvas space
+   * @param {number} canvasPointY - Y coordinate in canvas space
    */
   drawReferenceTriangle(canvasPointX, canvasPointY) {
     this.ctx.strokeStyle = this.colors.hover;
@@ -1124,7 +1189,7 @@ class UnitCircle {
   }
 }
 
-// Wait for DOM to load before initializing
+// Initialize the unit circle when the DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
   new UnitCircle();
 });

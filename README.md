@@ -2,7 +2,7 @@
 
 An interactive web application that visualizes the unit circle, helping students learn and explore trigonometric concepts. This educational tool is perfect for Algebra 2 and Trigonometry students to understand angles, coordinates, and trigonometric functions.
 
-Live demo: `https://tartuke.github.io/unit-circle-visualizer/`
+[Live demo](https://tartuke.github.io/unit-circle-visualizer/)
 
 ## Features
 

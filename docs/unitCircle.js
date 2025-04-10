@@ -67,7 +67,7 @@ class UnitCircle {
   };
 
   /** @type {number} Tolerance for snapping to special angles in radians */
-  snapTolerance = 0.05;
+  snapTolerance = 0.02;
 
   /**
    * Constructor - Initializes the unit circle visualization
@@ -1000,6 +1000,28 @@ class UnitCircle {
     );
     this.ctx.stroke();
 
+    // Add arrow head at end of arc
+    const arrowSize = 10;
+    const endX =
+      this.centerX + standardArcRadius * Math.cos(-normalizedMathAngle);
+    const endY =
+      this.centerY + standardArcRadius * Math.sin(-normalizedMathAngle);
+    const angle = (-normalizedMathAngle - Math.PI / 2) / 1; // Perpendicular to radius at end point
+
+    // Draw arrow head
+    if (Math.abs(degrees) > 0.1) {
+      this.ctx.moveTo(
+        endX - arrowSize * Math.cos(angle - Math.PI / 6),
+        endY - arrowSize * Math.sin(angle - Math.PI / 6)
+      );
+      this.ctx.lineTo(endX, endY);
+      this.ctx.lineTo(
+        endX - arrowSize * Math.cos(angle + Math.PI / 6),
+        endY - arrowSize * Math.sin(angle + Math.PI / 6)
+      );
+      this.ctx.stroke();
+    }
+
     // Standard angle label (numeric degrees) - Placement uses MATH angle midpoint
     // Avoid placing label directly at 0 or 2PI if angle is tiny
     const standardLabelAngleMid =
@@ -1129,7 +1151,12 @@ class UnitCircle {
    */
   drawHoverAngleLabel(angleInfo, canvasPointX, canvasPointY) {
     // angleInfo contains MATH angle/degrees
-    const angleText = `${angleInfo.degrees.toFixed(1)}°`;
+    const angleText =
+      angleInfo.isExact && angleInfo.exactCoordsStr
+        ? angleInfo.exactCoordsStr
+        : `(${angleInfo.coords.x.toFixed(2)}, ${angleInfo.coords.y.toFixed(
+            2
+          )})`;
     const offset = 30;
 
     // Calculate offset direction using the MATH angle

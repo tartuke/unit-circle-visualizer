@@ -1,0 +1,148 @@
+<!-- /public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Unit Circle - Algebra 2 Learning Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Interactive Unit Circle</h1>
+        <p>Explore angles, coordinates, and trigonometric functions</p>
+      </header>
+
+      <div class="main-content">
+        <!-- Unit Circle Visualization -->
+        <div class="unit-circle-container">
+          <canvas id="unitCircleCanvas"></canvas>
+        </div>
+
+        <!-- Information Panel -->
+        <div class="info-panel">
+          <h2>Angle Information</h2>
+          <div class="angle-info">
+            <p>
+              <span class="label">Angle (θ):</span>
+              <span id="degreesValue">0°</span>
+            </p>
+            <p>
+              <span class="label">Angle (θ):</span>
+              <span id="radiansValue">0 rad</span>
+            </p>
+            <p>
+              <span class="label">Coordinates:</span>
+              <span id="coordinatesValue">(1, 0)</span>
+            </p>
+          </div>
+
+          <h3>Trigonometric Values</h3>
+          <div class="trig-values">
+            <p>
+              <span class="label">sin(θ):</span> <span id="sinValue">0</span>
+            </p>
+            <p>
+              <span class="label">cos(θ):</span> <span id="cosValue">1</span>
+            </p>
+            <p>
+              <span class="label">tan(θ):</span> <span id="tanValue">0</span>
+            </p>
+            <div id="extraTrigValues" class="hide">
+              <p>
+                <span class="label">csc(θ):</span>
+                <span id="cscValue">undefined</span>
+              </p>
+              <p>
+                <span class="label">sec(θ):</span> <span id="secValue">1</span>
+              </p>
+              <p>
+                <span class="label">cot(θ):</span>
+                <span id="cotValue">undefined</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="angle-reference">
+            <p>
+              <span class="label">Reference Angle:</span>
+              <span id="refAngleValue">0° / 0 rad</span>
+            </p>
+            <p>
+              <span class="label">Quadrant:</span>
+              <span id="quadrantValue">I</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+          <h2>Controls & Settings</h2>
+
+          <div class="control-group">
+            <button id="clearPinsBtn">Clear Pinned Angles</button>
+
+            <h3>Pinned Angles</h3>
+            <div class="pinned-angles-manager">
+              <ul id="pinnedAnglesList">
+                <!-- Pinned angles will be listed here dynamically -->
+                <li class="empty-list-message">No angles pinned yet</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <h3>Static Labels</h3>
+            <label>
+              <input type="checkbox" id="showDegreesCheck" checked />
+              Show Special Angle Degrees
+            </label>
+            <label>
+              <input type="checkbox" id="showRadiansCheck" checked />
+              Show Special Angle Radians
+            </label>
+            <label>
+              <input type="checkbox" id="showCoordinatesCheck" checked />
+              Show Special Angle Coordinates
+            </label>
+          </div>
+
+          <div class="control-group">
+            <h3>Dynamic Helpers</h3>
+            <label>
+              <input type="checkbox" id="showRefTriangleCheck" checked />
+              Show Reference Triangle
+            </label>
+            <label>
+              <input type="checkbox" id="snapToAnglesCheck" checked />
+              Snap to Special Angles
+            </label>
+            <label>
+              <input type="checkbox" id="showAngleArcsCheck" checked />
+              Show Angle Arcs (θ & θ')
+            </label>
+          </div>
+
+          <div class="control-group">
+            <h3>Info Panel Options</h3>
+            <label>
+              <input type="checkbox" id="showExtraTrigCheck" />
+              Show csc, sec, cot
+            </label>
+            <label>
+              <input type="checkbox" id="showRefAngleCheck" checked />
+              Show Reference Angle
+            </label>
+            <label>
+              <input type="checkbox" id="showQuadrantCheck" checked />
+              Show Quadrant
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="unitCircle.js"></script>
+  </body>
+</html>

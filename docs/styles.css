@@ -1,9 +1,14 @@
-/* /public/styles.css
+/* /public/styles.css */
 /* Global styles */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent; /* Remove blue tap highlight on mobile */
+}
+
+html {
+  font-size: 16px; /* Base font size */
 }
 
 body {
@@ -11,7 +16,9 @@ body {
   line-height: 1.6;
   color: #333;
   background-color: #f5f5f5;
-  padding: 20px;
+  padding: 10px; /* Reduce body padding slightly for small screens */
+  -webkit-text-size-adjust: 100%; /* Prevent font scaling on orientation change */
+  text-size-adjust: 100%;
 }
 
 .container {
@@ -20,44 +27,70 @@ body {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow: hidden; /* Keep this */
 }
 
 header {
   background-color: #3498db;
   color: white;
-  padding: 20px;
+  padding: 15px 20px; /* Adjust padding */
   text-align: center;
+}
+
+header h1 {
+  font-size: 1.5rem; /* Relative font size */
+  margin-bottom: 5px;
 }
 
 header p {
   opacity: 0.8;
   margin-top: 5px;
+  font-size: 0.9rem;
 }
 
-h1,
-h2,
-h3 {
+h2 {
+  font-size: 1.25rem;
   margin-bottom: 15px;
+}
+h3 {
+  font-size: 1.1rem;
+  margin-bottom: 10px;
 }
 
 .main-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Mobile first: default to single column */
+  grid-template-columns: 1fr;
   grid-template-areas:
-    "circle info"
-    "circle controls";
-  gap: 20px;
-  padding: 20px;
+    "circle"
+    "info"
+    "controls";
+  gap: 15px; /* Reduced gap */
+  padding: 15px; /* Reduced padding */
 }
 
-@media (max-width: 900px) {
+/* Tablet and Desktop Layout */
+@media (min-width: 768px) {
+  /* Use a common tablet breakpoint */
   .main-content {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     grid-template-areas:
-      "circle"
-      "info"
-      "controls";
+      "circle info"
+      "circle controls";
+    gap: 20px;
+    padding: 20px;
+  }
+  html {
+    font-size: 17px; /* Slightly larger base on bigger screens */
+  }
+}
+@media (min-width: 1024px) {
+  /* Larger desktop */
+  html {
+    font-size: 18px;
+  }
+  header h1 {
+    font-size: 1.8rem;
   }
 }
 
@@ -65,18 +98,29 @@ h3 {
 .unit-circle-container {
   grid-area: circle;
   position: relative;
-  aspect-ratio: 1/1;
+  aspect-ratio: 1 / 1; /* Keep aspect ratio */
   width: 100%;
+  max-width: 600px; /* Max width on larger screens to prevent it getting huge */
+  margin: 0 auto; /* Center if max-width applies */
   background-color: #fcfcfc;
   border: 1px solid #ddd;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: hidden; /* Keep this */
+  touch-action: none; /* Prevent browser gestures like swipe back/forward on canvas */
 }
-
-#unitCircleCanvas {
+/* Ensure canvas fills the container */
+.unit-circle-container::before {
+  content: "";
   display: block;
+  padding-top: 100%; /* This forces the 1:1 aspect ratio */
+}
+#unitCircleCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  display: block;
   cursor: crosshair;
 }
 
@@ -86,19 +130,24 @@ h3 {
   background-color: white;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 20px;
+  padding: 15px; /* Reduced padding */
 }
 
-.angle-info,
-.trig-values,
-.angle-reference {
-  margin-bottom: 20px;
+.angle-info p,
+.trig-values p,
+.angle-reference p {
+  margin-bottom: 8px; /* Smaller margin */
+  font-size: 0.95rem;
 }
 
 .label {
   font-weight: bold;
   display: inline-block;
-  width: 110px;
+  width: 100px; /* Slightly reduced width */
+  margin-right: 5px;
+}
+#extraTrigValues p {
+  margin-left: 10px; /* Indent extra values slightly */
 }
 
 /* Controls Panel Styles */
@@ -107,11 +156,14 @@ h3 {
   background-color: white;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 20px;
+  padding: 15px; /* Reduced padding */
 }
 
 .control-group {
-  margin-bottom: 20px;
+  margin-bottom: 15px; /* Reduced margin */
+}
+.control-group:last-child {
+  margin-bottom: 0;
 }
 
 button {
@@ -121,24 +173,34 @@ button {
   padding: 10px 15px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.95rem; /* Relative font size */
   margin-bottom: 15px;
   transition: background-color 0.2s;
+  display: block; /* Make button take full width */
+  width: 100%;
 }
 
 button:hover {
   background-color: #2980b9;
 }
+button:active {
+  background-color: #216a94; /* Darker on active/tap */
+}
 
 label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px; /* Increased spacing for easier tapping */
   user-select: none;
   cursor: pointer;
+  padding: 5px 0; /* Add vertical padding to increase tap area */
+  font-size: 0.95rem;
 }
 
 input[type="checkbox"] {
-  margin-right: 8px;
+  margin-right: 10px; /* More space next to checkbox */
+  vertical-align: middle; /* Align checkbox with text */
+  width: 18px; /* Slightly larger checkbox */
+  height: 18px;
 }
 
 /* Utility Classes */
@@ -146,7 +208,7 @@ input[type="checkbox"] {
   display: none;
 }
 
-/* Colors for different elements */
+/* Colors for different elements (using CSS variables) */
 :root {
   --static-color: #888;
   --hover-color: #3498db;
@@ -162,9 +224,10 @@ input[type="checkbox"] {
 .pinned-angles-manager {
   border: 1px solid #ddd;
   border-radius: 4px;
-  max-height: 200px;
+  max-height: 180px; /* Slightly reduced max height */
   overflow-y: auto;
   margin-top: 10px;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 #pinnedAnglesList {
@@ -173,12 +236,13 @@ input[type="checkbox"] {
 }
 
 #pinnedAnglesList li {
-  padding: 8px 12px;
+  padding: 10px 12px; /* Increased padding for tapping */
   border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 
 #pinnedAnglesList li:last-child {
@@ -186,12 +250,16 @@ input[type="checkbox"] {
 }
 
 #pinnedAnglesList li:hover {
-  background-color: #f5f5f5;
+  background-color: #f0f0f0; /* Slightly darker hover */
+}
+#pinnedAnglesList li:active {
+  background-color: #e8e8e8; /* Active state for tap feedback */
 }
 
 #pinnedAnglesList li.selected {
   background-color: #e8f4fc;
-  border-left: 3px solid var(--hover-color);
+  border-left: 4px solid var(--hover-color); /* Thicker selection indicator */
+  font-weight: 500; /* Slightly bolder text for selected */
 }
 
 #pinnedAnglesList li.empty-list-message {
@@ -199,6 +267,7 @@ input[type="checkbox"] {
   color: #999;
   text-align: center;
   cursor: default;
+  padding: 15px;
 }
 
 .delete-pin {
@@ -206,18 +275,24 @@ input[type="checkbox"] {
   color: white;
   border: none;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  font-size: 10px;
-  line-height: 1;
+  width: 24px; /* Larger tap target */
+  height: 24px; /* Larger tap target */
+  font-size: 14px; /* Larger 'x' */
+  line-height: 24px; /* Center 'x' vertically */
+  text-align: center;
   padding: 0;
   cursor: pointer;
   opacity: 0.8;
-  transition: opacity 0.2s;
-  margin: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+  margin: 0 0 0 10px; /* Add left margin */
+  flex-shrink: 0; /* Prevent shrinking */
 }
 
 .delete-pin:hover {
   opacity: 1;
   background-color: var(--delete-color);
+}
+.delete-pin:active {
+  background-color: #c0392b; /* Darker red on active/tap */
+  opacity: 1;
 }

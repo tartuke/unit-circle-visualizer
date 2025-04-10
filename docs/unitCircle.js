@@ -26,6 +26,13 @@ class UnitCircle {
   /** @type {Array} Special angles data with exact values */
   specialAngles = [];
 
+  /** @type {boolean} Whether mouse/touch is actively interacting near the circle */
+  isInteractionActive = false; // Renamed from isMouseOverCircle
+  /** @type {Object} Pointer position (mouse or touch) in canvas coordinates */
+  pointerCanvasPos = { x: 0, y: 0 }; // Renamed from mouseCanvasPos
+  /** @type {boolean} Flag to track if touch has moved significantly */
+  touchMoved = false;
+
   /** @type {boolean} Whether mouse is over the circle */
   isMouseOverCircle = false;
   /** @type {Object} Mouse position in canvas coordinates */
@@ -75,9 +82,9 @@ class UnitCircle {
   constructor() {
     this.initCanvas();
     this.initSpecialAngles();
-    this.setupEventListeners();
+    this.setupEventListeners(); // Will now set up both mouse and touch
     this.setupControlListeners();
-    this.updatePinnedAnglesList(); // Initialize the pinned angles list
+    this.updatePinnedAnglesList();
     this.draw();
   }
 
@@ -283,75 +290,221 @@ class UnitCircle {
   // ===== EVENT HANDLING =====
 
   /**
-   * Set up mouse event listeners for the canvas
+   * Get pointer coordinates relative to the canvas, handling both mouse and touch events.
+   * @param {MouseEvent|TouchEvent} e - The event object
+   * @returns {{x: number, y: number}|null} Canvas coordinates or null if no touch point
    */
-  setupEventListeners() {
-    this.canvas.addEventListener("mousemove", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      // 1. Get mouse position relative to canvas top-left
-      const canvasMouseX = e.clientX - rect.left;
-      const canvasMouseY = e.clientY - rect.top;
-      this.mouseCanvasPos = { x: canvasMouseX, y: canvasMouseY };
+  getPointerPosition(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    let clientX, clientY;
 
-      // 2. Convert to Math coordinates (origin center, +y up)
-      const mathMousePos = this.canvasToMath(canvasMouseX, canvasMouseY);
+    if (e.touches && e.touches.length > 0) {
+      // Use the first touch point
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      // Use changedTouches for touchend/touchcancel
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else if (e.clientX !== undefined) {
+      // Mouse event
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else {
+      return null; // No pointer data
+    }
 
-      // 3. Check distance from center using Math coordinates
-      const distanceFromCenter = Math.sqrt(
-        Math.pow(mathMousePos.x, 2) + Math.pow(mathMousePos.y, 2)
-      );
-      this.isMouseOverCircle = distanceFromCenter <= this.radius * 1.3; // Allow slight margin
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  }
 
-      // 4. Calculate angle using Math coordinates with atan2(y, x)
-      let angle = Math.atan2(mathMousePos.y, mathMousePos.x);
-      // Ensure angle is [0, 2PI)
+  /**
+   * Central handler for pointer movement (mouse or touch).
+   * Updates the angle and redraws.
+   * @param {number} canvasX - X coordinate relative to canvas top-left
+   * @param {number} canvasY - Y coordinate relative to canvas top-left
+   */
+  handlePointerMove(canvasX, canvasY) {
+    if (this.selectedPinId !== null) return; // Ignore if a pin is selected
+    this.pointerCanvasPos = { x: canvasX, y: canvasY };
+    const mathPointerPos = this.canvasToMath(canvasX, canvasY);
+    const distanceFromCenter = Math.sqrt(
+      Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
+    );
+
+    // Update active state ONLY if the pointer is near the circle
+    // This allows interaction to "stop" if moving far away, even if touch is still down
+    this.isInteractionActive = distanceFromCenter <= this.radius * 1.3;
+
+    if (this.isInteractionActive) {
+      let angle = Math.atan2(mathPointerPos.y, mathPointerPos.x);
       if (angle < 0) angle += 2 * Math.PI;
 
-      // 5. Handle snapping (using the calculated math angle)
       if (this.options.snapToAngles) {
         const closestAngle = this.findClosestSpecialAngle(angle);
         if (closestAngle) {
           angle = closestAngle.radians;
         }
       }
-
-      // 6. Update state
-      this.currentAngle = angle; // Store the final math angle
-
-      // 7. Calculate the point on the circle in MATH coordinates
+      this.currentAngle = angle;
       const currentMathPoint = {
         x: Math.cos(this.currentAngle) * this.radius,
         y: Math.sin(this.currentAngle) * this.radius,
       };
-      // 8. Convert the math point to CANVAS coordinates for drawing/storing
       this.currentPoint = this.mathToCanvas(
         currentMathPoint.x,
         currentMathPoint.y
       );
+    }
 
-      // Update info panel and redraw
+    // Always update info and redraw during movement
+    this.updateInfoPanel();
+    this.draw();
+  }
+
+  /**
+   * Handle pointer down (mousedown or touchstart).
+   * @param {MouseEvent|TouchEvent} e
+   */
+  handlePointerDown(e) {
+    const pos = this.getPointerPosition(e);
+    if (!pos) return;
+
+    if (e.type === "touchstart") {
+      // Prevent page scrolling when interacting with the canvas
+      e.preventDefault();
+      this.touchMoved = false; // Reset touch movement flag
+    }
+
+    // Check distance immediately on down event
+    const mathPointerPos = this.canvasToMath(pos.x, pos.y);
+    const distanceFromCenter = Math.sqrt(
+      Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
+    );
+    this.isInteractionActive = distanceFromCenter <= this.radius * 1.3;
+
+    // Update visuals immediately based on press location
+    if (this.isInteractionActive) {
+      this.handlePointerMove(pos.x, pos.y);
+    }
+  }
+
+  /**
+   * Handle pointer up (mouseup or touchend).
+   * Handles pinning logic for taps/clicks.
+   * @param {MouseEvent|TouchEvent} e
+   */
+  handlePointerUp(e) {
+    const pos = this.getPointerPosition(e); // Get final position
+    if (!pos) return;
+
+    // Check distance again on release
+    const mathPointerPos = this.canvasToMath(pos.x, pos.y);
+    const distanceFromCenter = Math.sqrt(
+      Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
+    );
+    const wasActive = this.isInteractionActive; // Remember if interaction was active before clearing
+
+    // If a pin is selected and we're clicking on the circle, unselect it first
+    if (this.isInteractionActive && this.selectedPinId !== null) {
+      this.selectedPinId = null;
+      this.updatePinnedAnglesList();
       this.updateInfoPanel();
       this.draw();
-    });
+      this.handlePointerMove(pos.x, pos.y);
+      return; // Exit after unselecting to require a second click to pin a new angle
+    }
 
-    this.canvas.addEventListener("mouseout", () => {
-      this.isMouseOverCircle = false;
-      this.draw(); // Redraw to remove hover effects
-    });
-
-    this.canvas.addEventListener("click", () => {
-      if (this.isMouseOverCircle) {
+    // Pinning Logic:
+    // Pin if the interaction was active *and*
+    // - It was a mouse event (mouseup) OR
+    // - It was a touch end *without* significant movement (a tap)
+    if (wasActive && distanceFromCenter <= this.radius * 1.3) {
+      if (e.type === "mouseup" || (e.type === "touchend" && !this.touchMoved)) {
         const angleInfo = this.getCurrentAngleInfo();
+        const newPinId = this.nextPinId++;
         this.pinnedAngles.push({
-          id: this.nextPinId++,
-          angle: this.currentAngle, // Store math angle
-          point: { ...this.currentPoint }, // Store CANVAS coordinates
-          angleInfo: angleInfo, // Store full info object
+          id: newPinId,
+          angle: this.currentAngle,
+          point: { ...this.currentPoint },
+          angleInfo: angleInfo,
         });
+        // Immediately select the newly pinned angle
+        this.selectedPinId = newPinId;
         this.updatePinnedAnglesList();
-        this.draw();
+        this.updateInfoPanel(); // Update info panel with the selected pin's data
+        this.draw(); // Redraw to show the pinned angle immediately
       }
+    }
+
+    // Reset interaction state after handling potential pin
+    this.handlePointerEnd();
+  }
+
+  /**
+   * Handle pointer end (mouseleave, mouseout, touchend, touchcancel).
+   * Cleans up interaction state and redraws.
+   */
+  handlePointerEnd() {
+    // Only deactivate and redraw if interaction was previously active
+    // to avoid unnecessary redraws on mouseout far from circle.
+    if (this.isInteractionActive) {
+      this.isInteractionActive = false;
+      this.draw(); // Redraw to remove hover effects
+      this.updateInfoPanel(); // Clear panel if nothing selected
+    }
+    this.touchMoved = false; // Reset touch flag regardless
+  }
+
+  /**
+   * Set up mouse and touch event listeners for the canvas
+   */
+  setupEventListeners() {
+    // Mouse Events
+    this.canvas.addEventListener(
+      "mousedown",
+      this.handlePointerDown.bind(this)
+    );
+    this.canvas.addEventListener("mousemove", (e) => {
+      const pos = this.getPointerPosition(e);
+      if (pos) this.handlePointerMove(pos.x, pos.y);
     });
+    // Use mouseup on document to catch drags ending outside canvas
+    document.addEventListener("mouseup", this.handlePointerUp.bind(this));
+    // Use mouseleave on canvas to stop interaction if pointer leaves canvas
+    this.canvas.addEventListener(
+      "mouseleave",
+      this.handlePointerEnd.bind(this)
+    );
+
+    // Touch Events
+    this.canvas.addEventListener(
+      "touchstart",
+      this.handlePointerDown.bind(this),
+      { passive: false }
+    ); // Need passive: false to preventDefault
+    this.canvas.addEventListener(
+      "touchmove",
+      (e) => {
+        e.preventDefault(); // Prevent scroll during canvas drag
+        const pos = this.getPointerPosition(e);
+        if (pos) {
+          this.touchMoved = true; // Flag that touch has moved
+          this.handlePointerMove(pos.x, pos.y);
+        }
+      },
+      { passive: false }
+    );
+    this.canvas.addEventListener("touchend", this.handlePointerUp.bind(this));
+    this.canvas.addEventListener(
+      "touchcancel",
+      this.handlePointerEnd.bind(this)
+    );
+
+    // Window Resize
+    window.addEventListener("resize", () => this.resizeCanvas());
   }
 
   /**
@@ -524,22 +677,32 @@ class UnitCircle {
    * Update the information panel with current angle data
    */
   updateInfoPanel() {
-    if (!this.isMouseOverCircle && this.selectedPinId === null) return; // Don't update if nothing active
+    // Show info if interacting OR if a pin is selected
+    if (!this.isInteractionActive && this.selectedPinId === null) {
+      // Optionally clear the panel or show default/placeholder text
+      // document.getElementById("degreesValue").textContent = "-";
+      // ... clear other fields ...
+      return; // Or clear fields before returning
+    }
 
     let angleInfo;
-    if (this.isMouseOverCircle) {
+    if (this.isInteractionActive) {
       angleInfo = this.getCurrentAngleInfo();
     } else if (this.selectedPinId !== null) {
       const selectedPin = this.pinnedAngles.find(
         (p) => p.id === this.selectedPinId
       );
       if (selectedPin) {
-        angleInfo = selectedPin.angleInfo; // Use stored info for selected pin
+        angleInfo = selectedPin.angleInfo;
       } else {
-        return; // Should not happen if selectedPinId is valid
+        // Selected pin not found (shouldn't happen), clear panel
+        this.selectedPinId = null;
+        // ... clear fields ...
+        return;
       }
     } else {
-      return; // No hover, no selection
+      // Should not be reached if the initial check passes, but good practice
+      return;
     }
 
     const refAngle = this.calculateReferenceAngle(angleInfo.radians);
@@ -565,43 +728,40 @@ class UnitCircle {
       : angleInfo.cos.toFixed(3);
     document.getElementById("tanValue").textContent = angleInfo.isExact
       ? angleInfo.tanStr
-      : angleInfo.tan === Infinity
+      : angleInfo.tan === Infinity || isNaN(angleInfo.tan) // Check for NaN too
       ? "undefined"
       : angleInfo.tan.toFixed(3);
 
     if (this.options.showExtraTrig) {
       document.getElementById("cscValue").textContent = angleInfo.isExact
         ? angleInfo.cscStr
-        : angleInfo.csc === Infinity
+        : angleInfo.csc === Infinity || isNaN(angleInfo.csc)
         ? "undefined"
         : angleInfo.csc.toFixed(3);
       document.getElementById("secValue").textContent = angleInfo.isExact
         ? angleInfo.secStr
-        : angleInfo.sec === Infinity
+        : angleInfo.sec === Infinity || isNaN(angleInfo.sec)
         ? "undefined"
         : angleInfo.sec.toFixed(3);
       document.getElementById("cotValue").textContent = angleInfo.isExact
         ? angleInfo.cotStr
-        : angleInfo.cot === Infinity
+        : angleInfo.cot === Infinity || isNaN(angleInfo.cot)
         ? "undefined"
         : angleInfo.cot.toFixed(3);
     }
     if (this.options.showRefAngle) {
-      document.getElementById("refAngleValue").textContent = `${(
-        (refAngle * 180) /
-        Math.PI
-      ).toFixed(1)}° / ${
-        angleInfo.isExact
-          ? `${this.formatRadians(angleInfo.radians)} rad`
-          : `${(angleInfo.radians / Math.PI).toFixed(2)}π rad`
-      }`;
+      const refRadFormatted = this.formatRadians(refAngle); // Format ref angle too
+      const refDeg = (refAngle * 180) / Math.PI;
+      document.getElementById("refAngleValue").textContent = `${refDeg.toFixed(
+        1
+      )}° / ${refRadFormatted} rad`;
     } else {
-      document.getElementById("refAngleValue").textContent = "-"; // Hide if not shown
+      document.getElementById("refAngleValue").textContent = "-";
     }
     if (this.options.showQuadrant) {
       document.getElementById("quadrantValue").textContent = quadrant;
     } else {
-      document.getElementById("quadrantValue").textContent = "-"; // Hide if not shown
+      document.getElementById("quadrantValue").textContent = "-";
     }
   }
 
@@ -705,33 +865,41 @@ class UnitCircle {
     this.drawGrid();
     this.drawCircle();
     this.drawAxes();
-    this.drawSpecialAngles(); // Uses mathToCanvas internally
+    // Fade static labels if actively interacting
+    this.drawSpecialAngles(this.isInteractionActive);
 
-    // Draw arcs for selected angle (if any and option enabled)
-    if (this.options.showAngleArcs && this.selectedPinId !== null) {
-      const selectedPin = this.pinnedAngles.find(
-        (p) => p.id === this.selectedPinId
-      );
-      if (selectedPin) {
-        this.drawAngleArcs(selectedPin.angleInfo); // Uses math angles
+    // Draw elements for the selected pin FIRST if one exists
+    const selectedPin =
+      this.selectedPinId !== null
+        ? this.pinnedAngles.find((p) => p.id === this.selectedPinId)
+        : null;
+
+    if (selectedPin) {
+      // Draw arcs for selected angle
+      if (this.options.showAngleArcs) {
+        this.drawAngleArcs(selectedPin.angleInfo);
+      }
+      // Draw triangle for selected angle
+      if (this.options.showRefTriangle) {
+        this.drawReferenceTriangle(
+          selectedPin.point.x,
+          selectedPin.point.y,
+          this.colors.hover
+        ); // Use highlight color for selected
       }
     }
 
-    // Draw triangle for selected angle (if any and option enabled)
-    if (this.options.showRefTriangle && this.selectedPinId !== null) {
-      const selectedPin = this.pinnedAngles.find(
-        (p) => p.id === this.selectedPinId
-      );
-      if (selectedPin) {
-        this.drawReferenceTriangle(selectedPin.point.x, selectedPin.point.y); // Uses canvas point
-      }
+    // Draw *all* pinned angles (selected one will be drawn over slightly differently)
+    this.drawPinnedAngles();
+
+    // Draw current interaction effects if active AND no pin is selected (avoid overlap)
+    if (this.isInteractionActive && !selectedPin) {
+      this.drawCurrentAngle(); // Includes triangle, arcs (if enabled) for hover state
     }
 
-    this.drawPinnedAngles(); // Uses stored CANVAS coordinates
-
-    // Draw current hover effects if mouse is over circle
-    if (this.isMouseOverCircle) {
-      this.drawCurrentAngle(); // Calculates and uses mathToCanvas
+    // If a pin IS selected, draw its highlight effects (overwrites generic pinned point)
+    if (selectedPin) {
+      this.drawPinnedAngleHighlight(selectedPin);
     }
   }
 
@@ -809,15 +977,20 @@ class UnitCircle {
 
   /**
    * Draw the special angles markers and labels
+   * @param {boolean} faded - Whether to draw labels faded
    */
-  drawSpecialAngles() {
-    const labelDistFactor = 1.15; // Distance factor for labels from center
+  drawSpecialAngles(faded = false) {
+    // Added faded parameter
+    const labelDistFactor = 1.15;
     const markerRadius = 4;
-    const opacity = this.isMouseOverCircle ? 0.2 : 1.0;
-    this.ctx.font = "12px Arial"; // Slightly smaller font
+    const baseOpacity = faded ? 0.2 : 1.0; // Use parameter
+    const baseColor = this.colors.static.replace(
+      /,[^,)]+\)/,
+      `, ${baseOpacity})`
+    ); // Adjust alpha
+    this.ctx.font = "12px Arial";
 
     for (const angle of this.specialAngles) {
-      // 1. Calculate math coordinates for marker and labels
       const mathMarkerX = Math.cos(angle.radians) * this.radius;
       const mathMarkerY = Math.sin(angle.radians) * this.radius;
       const mathLabelX =
@@ -825,12 +998,11 @@ class UnitCircle {
       const mathLabelY =
         Math.sin(angle.radians) * this.radius * labelDistFactor;
 
-      // 2. Convert math coordinates to canvas coordinates
       const canvasMarker = this.mathToCanvas(mathMarkerX, mathMarkerY);
       const canvasLabel = this.mathToCanvas(mathLabelX, mathLabelY);
 
-      // 3. Draw marker dot at canvas coordinates
-      this.ctx.fillStyle = `rgba(136, 136, 136, ${opacity})`;
+      // Draw marker dot
+      this.ctx.fillStyle = baseColor;
       this.ctx.beginPath();
       this.ctx.arc(
         canvasMarker.x,
@@ -841,99 +1013,149 @@ class UnitCircle {
       );
       this.ctx.fill();
 
-      // 4. Draw labels near canvas label coordinates (adjust alignment)
-      this.ctx.fillStyle = `rgba(136, 136, 136, ${opacity})`;
+      // Draw labels
+      this.ctx.fillStyle = baseColor;
       this.ctx.textAlign = "center";
       this.ctx.textBaseline = "middle";
 
-      const yOffset1 = -8; // Offset for first line (deg/rad)
-      const yOffset2 = 8; // Offset for second line (coords)
+      const yOffset1 = -8;
+      const yOffset2 = 8;
+      let line1Text = "";
+      let line2Text = "";
 
       if (this.options.showDegrees && this.options.showRadians) {
-        this.ctx.fillText(
-          `${angle.degrees}° | ${this.formatRadians(angle.radians)}`,
-          canvasLabel.x,
-          canvasLabel.y + yOffset1
-        );
+        line1Text = `${angle.degrees}° | ${this.formatRadians(angle.radians)}`;
       } else if (this.options.showDegrees) {
-        this.ctx.fillText(
-          `${angle.degrees}°`,
-          canvasLabel.x,
-          canvasLabel.y + yOffset1
-        );
+        line1Text = `${angle.degrees}°`;
       } else if (this.options.showRadians) {
-        this.ctx.fillText(
-          this.formatRadians(angle.radians),
-          canvasLabel.x,
-          canvasLabel.y + yOffset1
-        );
+        line1Text = this.formatRadians(angle.radians);
       }
 
       if (this.options.showCoordinates) {
-        this.ctx.fillText(
-          angle.exactCoordsStr,
-          canvasLabel.x,
-          canvasLabel.y + yOffset2
-        );
+        line2Text = angle.exactCoordsStr;
       }
-      this.ctx.textAlign = "start"; // Reset default
+
+      if (line1Text) {
+        this.ctx.fillText(
+          line1Text,
+          canvasLabel.x,
+          canvasLabel.y + (line2Text ? yOffset1 : 0)
+        ); // Center if only one line
+      }
+      if (line2Text) {
+        this.ctx.fillText(
+          line2Text,
+          canvasLabel.x,
+          canvasLabel.y + (line1Text ? yOffset2 : 0)
+        ); // Center if only one line
+      }
+
+      this.ctx.textAlign = "start";
       this.ctx.textBaseline = "alphabetic";
     }
   }
 
   /**
-   * Draw all pinned angles
+   * Draw all pinned angles (basic markers)
    */
   drawPinnedAngles() {
     if (this.pinnedAngles.length === 0) return;
 
     for (const pin of this.pinnedAngles) {
-      // pin.point already stores CANVAS coordinates
-      const { id, point, angleInfo } = pin;
+      const { id, point } = pin;
       const isSelected = id === this.selectedPinId;
 
-      // Styles based on selection
+      // Use basic pinned color unless selected (highlight drawn separately)
       this.ctx.strokeStyle = isSelected
         ? this.colors.hover
         : this.colors.pinned;
       this.ctx.fillStyle = isSelected ? this.colors.hover : this.colors.pinned;
-      this.ctx.lineWidth = isSelected ? 3 : 2;
-      const pointRadius = isSelected ? 8 : 6;
+      this.ctx.lineWidth = isSelected ? 2 : 1; // Slightly thicker line for selected
 
-      // Draw line (using canvas coords)
+      // Draw line
       this.ctx.beginPath();
       this.ctx.moveTo(this.centerX, this.centerY);
       this.ctx.lineTo(point.x, point.y);
       this.ctx.stroke();
 
-      // Draw point (using canvas coords)
+      // Draw arrow head
+      const arrowSize = isSelected ? 12 : 10;
+      const angle = Math.atan2(point.y - this.centerY, point.x - this.centerX);
       this.ctx.beginPath();
-      this.ctx.arc(point.x, point.y, pointRadius, 0, 2 * Math.PI);
+      this.ctx.moveTo(point.x, point.y);
+      this.ctx.lineTo(
+        point.x - arrowSize * Math.cos(angle - Math.PI / 6),
+        point.y - arrowSize * Math.sin(angle - Math.PI / 6)
+      );
+      this.ctx.lineTo(
+        point.x - arrowSize * Math.cos(angle + Math.PI / 6),
+        point.y - arrowSize * Math.sin(angle + Math.PI / 6)
+      );
+      this.ctx.closePath();
       this.ctx.fill();
-
-      // Draw label only for selected pin (position relative to canvas point)
-      if (isSelected) {
-        this.drawHoverAngleLabel(angleInfo, point.x, point.y); // Reuse hover label logic
-      }
     }
-    this.ctx.lineWidth = 1; // Reset default maybe
+    this.ctx.lineWidth = 1; // Reset
+  }
+
+  /**
+   * Draw highlight effects for the currently selected pinned angle
+   * @param {object} pin - The selected pin object
+   */
+  drawPinnedAngleHighlight(pin) {
+    if (!pin) return;
+    const { point, angleInfo } = pin;
+
+    // Draw larger circle and label for the selected pin
+    this.ctx.strokeStyle = this.colors.hover;
+    this.ctx.fillStyle = this.colors.hover;
+    this.ctx.lineWidth = 3; // Thicker line for selected highlight
+
+    // Redraw line (thicker)
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.centerX, this.centerY);
+    this.ctx.lineTo(point.x, point.y);
+    this.ctx.stroke();
+
+    // Draw arrow head (larger for selected)
+    const arrowSize = 14;
+    const angle = Math.atan2(point.y - this.centerY, point.x - this.centerX);
+    this.ctx.beginPath();
+    this.ctx.moveTo(point.x, point.y);
+    this.ctx.lineTo(
+      point.x - arrowSize * Math.cos(angle - Math.PI / 6),
+      point.y - arrowSize * Math.sin(angle - Math.PI / 6)
+    );
+    this.ctx.lineTo(
+      point.x - arrowSize * Math.cos(angle + Math.PI / 6),
+      point.y - arrowSize * Math.sin(angle + Math.PI / 6)
+    );
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    // Draw label
+    this.drawHoverAngleLabel(angleInfo, point.x, point.y, true); // Pass flag for selected
+
+    this.ctx.lineWidth = 1; // Reset
   }
 
   /**
    * Draw the current hover angle effects
    */
   drawCurrentAngle() {
-    // this.currentAngle is MATH angle
-    // this.currentPoint is CANVAS coordinates of the point on the circle
+    // Should only be called when isInteractionActive is true and no pin is selected
 
-    const angleInfo = this.getCurrentAngleInfo(); // Based on math angle
+    const angleInfo = this.getCurrentAngleInfo();
 
-    // Draw reference triangle if enabled (uses canvas point)
+    // Draw reference triangle if enabled
     if (this.options.showRefTriangle) {
-      this.drawReferenceTriangle(this.currentPoint.x, this.currentPoint.y);
+      this.drawReferenceTriangle(
+        this.currentPoint.x,
+        this.currentPoint.y,
+        this.colors.hover
+      );
     }
 
-    // Draw terminal line (from canvas center to canvas point)
+    // Draw terminal line
     this.ctx.strokeStyle = this.colors.hover;
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -941,7 +1163,7 @@ class UnitCircle {
     this.ctx.lineTo(this.currentPoint.x, this.currentPoint.y);
     this.ctx.stroke();
 
-    // Draw arrow head (at canvas point)
+    // Draw arrow head
     const arrowSize = 10;
     const angle = Math.atan2(
       this.currentPoint.y - this.centerY,
@@ -961,16 +1183,17 @@ class UnitCircle {
     this.ctx.closePath();
     this.ctx.fill();
 
-    // Draw angle label near the hover point (using canvas point)
+    // Draw angle label
     this.drawHoverAngleLabel(
       angleInfo,
       this.currentPoint.x,
-      this.currentPoint.y
+      this.currentPoint.y,
+      false // Not a selected pin
     );
 
-    // Draw angle arcs if hovering and option enabled (don't draw if showing selected arcs)
-    if (this.options.showAngleArcs && this.selectedPinId === null) {
-      this.drawAngleArcs(angleInfo); // Uses math angles
+    // Draw angle arcs if hovering and option enabled
+    if (this.options.showAngleArcs) {
+      this.drawAngleArcs(angleInfo);
     }
   }
 
@@ -1214,19 +1437,18 @@ class UnitCircle {
     this.ctx.lineWidth = 1;
     this.ctx.setLineDash([5, 3]);
 
-    // Draw from canvas point to canvas y-center on same x
     this.ctx.beginPath();
     this.ctx.moveTo(canvasPointX, canvasPointY);
-    this.ctx.lineTo(canvasPointX, this.centerY);
+    this.ctx.lineTo(canvasPointX, this.centerY); // Line to X-axis
     this.ctx.stroke();
 
-    // Draw from canvas y-center to canvas center
     this.ctx.beginPath();
     this.ctx.moveTo(canvasPointX, this.centerY);
-    this.ctx.lineTo(this.centerX, this.centerY);
+    this.ctx.lineTo(this.centerX, this.centerY); // Line along X-axis to center
     this.ctx.stroke();
 
-    this.ctx.setLineDash([]); // Reset line dash
+    this.ctx.setLineDash([]);
+    this.ctx.lineWidth = 1; // Reset
   }
 }
 

@@ -2,6 +2,8 @@
 
 An interactive web application that visualizes the unit circle, helping students learn and explore trigonometric concepts. This educational tool is perfect for Algebra 2 and Trigonometry students to understand angles, coordinates, and trigonometric functions.
 
+Live demo: `https://tartuke.github.io/unit-circle-visualizer/`
+
 ## Features
 
 - **Interactive Visualization**: Drag points around the unit circle to see real-time updates
@@ -50,32 +52,13 @@ bun run index.ts
 
 Then open your browser and navigate to [http://localhost:3001](http://localhost:3001)
 
-## Deployment to GitHub Pages
-
-This project is set up to be easily deployed to GitHub Pages. Follow these steps:
-
-1. Push your code to GitHub:
-
-   ```bash
-   git add .
-   git commit -m "Initial commit"
-   git push
-   ```
-
-2. Go to your GitHub repository settings
-3. Scroll down to the "GitHub Pages" section
-4. Under "Source", select "main" branch
-5. Click "Save"
-
-Your site will be published at `https://tartuke.github.io/unit-circle-visualizer/`
-
 ## Project Structure
 
-- `index.html` - Main HTML file for GitHub Pages
 - `index.ts` - Server code for local development
-- `public/index.html` - HTML structure for local development
-- `public/styles.css` - Styling for the application
-- `public/unitCircle.js` - JavaScript code for the interactive unit circle
+- `docs/index.html` - HTML file for GitHub Pages
+- `docs/styles.css` - Styling for the application
+- `docs/unitCircle.js` - JavaScript code for the interactive unit circle
+- `LICENSE` - MIT License file
 
 ## Contributing
 

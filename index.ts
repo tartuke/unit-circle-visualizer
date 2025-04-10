@@ -23,11 +23,11 @@ serve({
 
     // Serve different file types based on path
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      return serveStaticFile("public/index.html", "text/html");
+      return serveStaticFile("docs/index.html", "text/html");
     } else if (url.pathname === "/styles.css") {
-      return serveStaticFile("public/styles.css", "text/css");
+      return serveStaticFile("docs/styles.css", "text/css");
     } else if (url.pathname === "/unitCircle.js") {
-      return serveStaticFile("public/unitCircle.js", "text/javascript");
+      return serveStaticFile("docs/unitCircle.js", "text/javascript");
     } else {
       return new Response("Not found", { status: 404 });
     }

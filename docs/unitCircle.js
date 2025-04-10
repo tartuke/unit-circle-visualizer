@@ -47,6 +47,10 @@ class UnitCircle {
   nextPinId = 1;
   /** @type {number|null} Currently selected pin ID */
   selectedPinId = null;
+  /** @type {number|null} ID of the pinned angle being hovered over */
+  hoveredPinId = null;
+  /** @type {number} Distance threshold for detecting clicks on pinned angles (in pixels) */
+  pinClickThreshold = 15;
 
   /** @type {Object} Display options */
   options = {
@@ -327,8 +331,21 @@ class UnitCircle {
    * @param {number} canvasY - Y coordinate relative to canvas top-left
    */
   handlePointerMove(canvasX, canvasY) {
-    if (this.selectedPinId !== null) return; // Ignore if a pin is selected
     this.pointerCanvasPos = { x: canvasX, y: canvasY };
+
+    // Check if hovering over a pinned angle
+    const nearestPinId = this.findNearestPinnedAngle(canvasX, canvasY);
+    if (nearestPinId !== this.hoveredPinId) {
+      this.hoveredPinId = nearestPinId;
+      // Update cursor style based on hover state
+      this.canvas.style.cursor =
+        nearestPinId !== null ? "pointer" : "crosshair";
+      this.draw(); // Redraw to show hover effect
+    }
+
+    // If a pin is selected, just update hover state but don't change the angle
+    if (this.selectedPinId !== null) return;
+
     const mathPointerPos = this.canvasToMath(canvasX, canvasY);
     const distanceFromCenter = Math.sqrt(
       Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
@@ -400,15 +417,38 @@ class UnitCircle {
     const pos = this.getPointerPosition(e); // Get final position
     if (!pos) return;
 
-    // Check distance again on release
+    // First, check if we're clicking on a pinned angle
+    const clickedPinId = this.findNearestPinnedAngle(pos.x, pos.y);
+
+    // Check distance from center for other operations
     const mathPointerPos = this.canvasToMath(pos.x, pos.y);
     const distanceFromCenter = Math.sqrt(
       Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
     );
     const wasActive = this.isInteractionActive; // Remember if interaction was active before clearing
 
-    // If a pin is selected and we're clicking on the circle, unselect it first
-    if (this.isInteractionActive && this.selectedPinId !== null) {
+    // Case 1: Clicked on a pinned angle
+    if (clickedPinId !== null) {
+      // If we clicked on the currently selected pin, unselect it
+      if (clickedPinId === this.selectedPinId) {
+        this.selectedPinId = null;
+      } else {
+        // Otherwise, select the clicked pin
+        this.selectedPinId = clickedPinId;
+      }
+      this.updatePinnedAnglesList();
+      this.updateInfoPanel();
+      this.draw();
+      this.handlePointerMove(pos.x, pos.y); // Update hover state
+      return; // Exit after handling the pinned angle click
+    }
+
+    // Case 2: A pin is selected and we're clicking elsewhere on the circle
+    if (
+      this.selectedPinId !== null &&
+      wasActive &&
+      distanceFromCenter <= this.radius * 1.3
+    ) {
       this.selectedPinId = null;
       this.updatePinnedAnglesList();
       this.updateInfoPanel();
@@ -417,11 +457,12 @@ class UnitCircle {
       return; // Exit after unselecting to require a second click to pin a new angle
     }
 
-    // Pinning Logic:
-    // Pin if the interaction was active *and*
-    // - It was a mouse event (mouseup) OR
-    // - It was a touch end *without* significant movement (a tap)
-    if (wasActive && distanceFromCenter <= this.radius * 1.3) {
+    // Case 3: No pin is selected and we're clicking on the circle to create a new pin
+    if (
+      this.selectedPinId === null &&
+      wasActive &&
+      distanceFromCenter <= this.radius * 1.3
+    ) {
       if (e.type === "mouseup" || (e.type === "touchend" && !this.touchMoved)) {
         const angleInfo = this.getCurrentAngleInfo();
         const newPinId = this.nextPinId++;
@@ -450,8 +491,10 @@ class UnitCircle {
   handlePointerEnd() {
     // Only deactivate and redraw if interaction was previously active
     // to avoid unnecessary redraws on mouseout far from circle.
-    if (this.isInteractionActive) {
+    if (this.isInteractionActive || this.hoveredPinId !== null) {
       this.isInteractionActive = false;
+      this.hoveredPinId = null; // Reset hover state
+      this.canvas.style.cursor = "crosshair"; // Reset cursor
       this.draw(); // Redraw to remove hover effects
       this.updateInfoPanel(); // Clear panel if nothing selected
     }
@@ -855,6 +898,91 @@ class UnitCircle {
     this.draw();
   }
 
+  /**
+   * Check if a point is near a pinned angle
+   * @param {number} x - X coordinate in canvas space
+   * @param {number} y - Y coordinate in canvas space
+   * @returns {number|null} ID of the nearest pinned angle within threshold, or null if none
+   */
+  findNearestPinnedAngle(x, y) {
+    if (this.pinnedAngles.length === 0) return null;
+
+    let nearestId = null;
+    let minDistance = this.pinClickThreshold;
+
+    // First check if we're near any pinned angle point
+    for (const pin of this.pinnedAngles) {
+      const distance = Math.sqrt(
+        Math.pow(pin.point.x - x, 2) + Math.pow(pin.point.y - y, 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestId = pin.id;
+      }
+    }
+
+    // If no point is close enough, check if we're near any pinned angle line
+    if (nearestId === null) {
+      for (const pin of this.pinnedAngles) {
+        // Calculate distance from point to line segment (center to pin point)
+        const distance = this.distanceToLineSegment(
+          this.centerX,
+          this.centerY, // Line start (center)
+          pin.point.x,
+          pin.point.y, // Line end (pin point)
+          x,
+          y // Test point
+        );
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestId = pin.id;
+        }
+      }
+    }
+
+    return nearestId;
+  }
+
+  /**
+   * Calculate the distance from a point to a line segment
+   * @param {number} x1 - Line segment start X
+   * @param {number} y1 - Line segment start Y
+   * @param {number} x2 - Line segment end X
+   * @param {number} y2 - Line segment end Y
+   * @param {number} px - Point X
+   * @param {number} py - Point Y
+   * @returns {number} The shortest distance from the point to the line segment
+   */
+  distanceToLineSegment(x1, y1, x2, y2, px, py) {
+    // Calculate the squared length of the line segment
+    const lengthSquared = Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+
+    // If the line segment is actually a point, return distance to that point
+    if (lengthSquared === 0) {
+      return Math.sqrt(Math.pow(px - x1, 2) + Math.pow(py - y1, 2));
+    }
+
+    // Calculate projection of point onto line segment
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / lengthSquared
+      )
+    );
+
+    // Calculate closest point on line segment
+    const projectionX = x1 + t * (x2 - x1);
+    const projectionY = y1 + t * (y2 - y1);
+
+    // Return distance to closest point
+    return Math.sqrt(
+      Math.pow(px - projectionX, 2) + Math.pow(py - projectionY, 2)
+    );
+  }
+
   // ===== DRAWING FUNCTIONS =====
 
   /**
@@ -1064,22 +1192,49 @@ class UnitCircle {
     for (const pin of this.pinnedAngles) {
       const { id, point } = pin;
       const isSelected = id === this.selectedPinId;
+      const isHovered = id === this.hoveredPinId;
 
-      // Use basic pinned color unless selected (highlight drawn separately)
-      this.ctx.strokeStyle = isSelected
-        ? this.colors.hover
-        : this.colors.pinned;
-      this.ctx.fillStyle = isSelected ? this.colors.hover : this.colors.pinned;
-      this.ctx.lineWidth = isSelected ? 2 : 1; // Slightly thicker line for selected
+      // Determine color and style based on state (selected > hovered > normal)
+      let color;
+      let lineWidth;
 
-      // Draw line
+      if (isSelected) {
+        color = this.colors.hover;
+        lineWidth = 2.5;
+      } else if (isHovered) {
+        color = this.colors.hover;
+        lineWidth = 2;
+      } else {
+        color = this.colors.pinned;
+        lineWidth = 1;
+      }
+
+      // If hovered or selected, draw a subtle glow effect first
+      if (isHovered || isSelected) {
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = lineWidth + 2;
+        this.ctx.globalAlpha = 0.3; // Transparent for glow effect
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.centerX, this.centerY);
+        this.ctx.lineTo(point.x, point.y);
+        this.ctx.stroke();
+
+        this.ctx.globalAlpha = 1.0; // Reset transparency
+      }
+
+      // Draw the main line
+      this.ctx.strokeStyle = color;
+      this.ctx.fillStyle = color;
+      this.ctx.lineWidth = lineWidth;
+
       this.ctx.beginPath();
       this.ctx.moveTo(this.centerX, this.centerY);
       this.ctx.lineTo(point.x, point.y);
       this.ctx.stroke();
 
       // Draw arrow head
-      const arrowSize = isSelected ? 12 : 10;
+      const arrowSize = isSelected ? 14 : isHovered ? 12 : 10;
       const angle = Math.atan2(point.y - this.centerY, point.x - this.centerX);
       this.ctx.beginPath();
       this.ctx.moveTo(point.x, point.y);
@@ -1093,6 +1248,11 @@ class UnitCircle {
       );
       this.ctx.closePath();
       this.ctx.fill();
+
+      // If hovered or selected, draw the angle label
+      if ((isHovered && !isSelected) || isSelected) {
+        this.drawHoverAngleLabel(pin.angleInfo, point.x, point.y, isSelected);
+      }
     }
     this.ctx.lineWidth = 1; // Reset
   }

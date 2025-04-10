@@ -300,7 +300,7 @@ class UnitCircle {
       const distanceFromCenter = Math.sqrt(
         Math.pow(mathMousePos.x, 2) + Math.pow(mathMousePos.y, 2)
       );
-      this.isMouseOverCircle = distanceFromCenter <= this.radius * 1.1; // Allow slight margin
+      this.isMouseOverCircle = distanceFromCenter <= this.radius * 1.3; // Allow slight margin
 
       // 4. Calculate angle using Math coordinates with atan2(y, x)
       let angle = Math.atan2(mathMousePos.y, mathMousePos.x);
@@ -941,10 +941,24 @@ class UnitCircle {
     this.ctx.lineTo(this.currentPoint.x, this.currentPoint.y);
     this.ctx.stroke();
 
-    // Draw hover point (at canvas point)
+    // Draw arrow head (at canvas point)
+    const arrowSize = 10;
+    const angle = Math.atan2(
+      this.currentPoint.y - this.centerY,
+      this.currentPoint.x - this.centerX
+    );
     this.ctx.fillStyle = this.colors.hover;
     this.ctx.beginPath();
-    this.ctx.arc(this.currentPoint.x, this.currentPoint.y, 6, 0, 2 * Math.PI);
+    this.ctx.moveTo(this.currentPoint.x, this.currentPoint.y);
+    this.ctx.lineTo(
+      this.currentPoint.x - arrowSize * Math.cos(angle - Math.PI / 6),
+      this.currentPoint.y - arrowSize * Math.sin(angle - Math.PI / 6)
+    );
+    this.ctx.lineTo(
+      this.currentPoint.x - arrowSize * Math.cos(angle + Math.PI / 6),
+      this.currentPoint.y - arrowSize * Math.sin(angle + Math.PI / 6)
+    );
+    this.ctx.closePath();
     this.ctx.fill();
 
     // Draw angle label near the hover point (using canvas point)

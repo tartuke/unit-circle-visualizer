@@ -2,8 +2,15 @@
  * Interactive Unit Circle - A learning tool for Algebra 2 students
  * Visualizes angles, coordinates, and trigonometric functions on the unit circle
  *
+ * Changes in v1.1.0:
+ * - Simplified coordinate transformation methods
+ * - Improved event handling with better performance
+ * - Optimized angle calculations and special value detection
+ * - Enhanced code readability and maintainability
+ * - Reduced code duplication in utility functions
+ *
  * @author Tartuke
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 class UnitCircle {
@@ -27,16 +34,11 @@ class UnitCircle {
   specialAngles = [];
 
   /** @type {boolean} Whether mouse/touch is actively interacting near the circle */
-  isInteractionActive = false; // Renamed from isMouseOverCircle
+  isInteractionActive = false;
   /** @type {Object} Pointer position (mouse or touch) in canvas coordinates */
-  pointerCanvasPos = { x: 0, y: 0 }; // Renamed from mouseCanvasPos
+  pointerCanvasPos = { x: 0, y: 0 };
   /** @type {boolean} Flag to track if touch has moved significantly */
   touchMoved = false;
-
-  /** @type {boolean} Whether mouse is over the circle */
-  isMouseOverCircle = false;
-  /** @type {Object} Mouse position in canvas coordinates */
-  mouseCanvasPos = { x: 0, y: 0 };
   /** @type {number} Current angle in standard math radians (0 right, counter-clockwise) */
   currentAngle = 0;
   /** @type {Object} Current point on circle in canvas coordinates */
@@ -51,6 +53,8 @@ class UnitCircle {
   hoveredPinId = null;
   /** @type {number} Distance threshold for detecting clicks on pinned angles (in pixels) */
   pinClickThreshold = 15;
+  /** @type {number} Multiplier for the radius to determine the interaction area */
+  interactionRadiusMultiplier = 1.3;
 
   /** @type {Object} Display options */
   options = {
@@ -102,9 +106,10 @@ class UnitCircle {
    * @returns {{x: number, y: number}} Math coordinates relative to center
    */
   canvasToMath(canvasX, canvasY) {
-    const mathX = canvasX - this.centerX;
-    const mathY = this.centerY - canvasY; // Invert Y axis
-    return { x: mathX, y: mathY };
+    return {
+      x: canvasX - this.centerX,
+      y: this.centerY - canvasY, // Invert Y axis
+    };
   }
 
   /**
@@ -115,9 +120,10 @@ class UnitCircle {
    * @returns {{x: number, y: number}} Canvas coordinates relative to top-left
    */
   mathToCanvas(mathX, mathY) {
-    const canvasX = mathX + this.centerX;
-    const canvasY = this.centerY - mathY; // Invert Y axis
-    return { x: canvasX, y: canvasY };
+    return {
+      x: mathX + this.centerX,
+      y: this.centerY - mathY, // Invert Y axis
+    };
   }
 
   // ===== INITIALIZATION =====
@@ -274,21 +280,38 @@ class UnitCircle {
    * @returns {string} The exact string representation
    */
   getExactTrigString(value) {
+    // Handle special cases
     if (value === 0) return "0";
     if (value === 1) return "1";
     if (value === -1) return "-1";
-    if (value === Infinity || value === -Infinity) return "undefined";
-    if (Math.abs(value - 0.5) < 1e-4) return "1/2";
-    if (Math.abs(value + 0.5) < 1e-4) return "-1/2";
-    if (Math.abs(value - Math.sqrt(3) / 2) < 1e-4) return "√3/2";
-    if (Math.abs(value + Math.sqrt(3) / 2) < 1e-4) return "-√3/2";
-    if (Math.abs(value - Math.sqrt(2) / 2) < 1e-4) return "√2/2";
-    if (Math.abs(value + Math.sqrt(2) / 2) < 1e-4) return "-√2/2";
-    if (Math.abs(value - 1 / Math.sqrt(3)) < 1e-4) return "1/√3";
-    if (Math.abs(value + 1 / Math.sqrt(3)) < 1e-4) return "-1/√3";
-    if (Math.abs(value - Math.sqrt(3)) < 1e-4) return "√3";
-    if (Math.abs(value + Math.sqrt(3)) < 1e-4) return "-√3";
-    return value.toFixed(3); // Default precision
+    if (value === Infinity || value === -Infinity || isNaN(value))
+      return "undefined";
+
+    // Define common exact values with their string representations
+    const exactValues = [
+      { value: 0.5, str: "1/2" },
+      { value: Math.sqrt(3) / 2, str: "√3/2" },
+      { value: Math.sqrt(2) / 2, str: "√2/2" },
+      { value: 1 / Math.sqrt(3), str: "1/√3" },
+      { value: Math.sqrt(3), str: "√3" },
+    ];
+
+    // Check for matches with a small tolerance
+    const tolerance = 1e-4;
+
+    // Check positive values
+    for (const exact of exactValues) {
+      if (Math.abs(value - exact.value) < tolerance) {
+        return exact.str;
+      }
+      // Check negative values
+      if (Math.abs(value + exact.value) < tolerance) {
+        return "-" + exact.str;
+      }
+    }
+
+    // Default to fixed precision for non-exact values
+    return value.toFixed(3);
   }
 
   // ===== EVENT HANDLING =====
@@ -302,22 +325,21 @@ class UnitCircle {
     const rect = this.canvas.getBoundingClientRect();
     let clientX, clientY;
 
-    if (e.touches && e.touches.length > 0) {
-      // Use the first touch point
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else if (e.changedTouches && e.changedTouches.length > 0) {
-      // Use changedTouches for touchend/touchcancel
-      clientX = e.changedTouches[0].clientX;
-      clientY = e.changedTouches[0].clientY;
+    // Extract client coordinates based on event type
+    if (e.touches?.length > 0) {
+      // First touch point for touchstart/touchmove
+      ({ clientX, clientY } = e.touches[0]);
+    } else if (e.changedTouches?.length > 0) {
+      // First touch point for touchend/touchcancel
+      ({ clientX, clientY } = e.changedTouches[0]);
     } else if (e.clientX !== undefined) {
       // Mouse event
-      clientX = e.clientX;
-      clientY = e.clientY;
+      ({ clientX, clientY } = e);
     } else {
       return null; // No pointer data
     }
 
+    // Convert to canvas coordinates
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
@@ -332,53 +354,74 @@ class UnitCircle {
    */
   handlePointerMove(canvasX, canvasY) {
     this.pointerCanvasPos = { x: canvasX, y: canvasY };
+    let needsRedraw = false;
+    let needsInfoUpdate = false;
 
     // Check if hovering over a pinned angle
     const nearestPinId = this.findNearestPinnedAngle(canvasX, canvasY);
-    if (nearestPinId !== this.hoveredPinId) {
+    const hoverChanged = nearestPinId !== this.hoveredPinId;
+
+    if (hoverChanged) {
       this.hoveredPinId = nearestPinId;
-      // Update cursor style based on hover state
       this.canvas.style.cursor =
         nearestPinId !== null ? "pointer" : "crosshair";
-      this.draw(); // Redraw to show hover effect
+      needsRedraw = true;
     }
 
     // If a pin is selected, just update hover state but don't change the angle
-    if (this.selectedPinId !== null) return;
+    if (this.selectedPinId !== null) {
+      if (needsRedraw) this.draw();
+      return;
+    }
 
+    // Calculate distance from center to determine if interaction is active
     const mathPointerPos = this.canvasToMath(canvasX, canvasY);
-    const distanceFromCenter = Math.sqrt(
-      Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
-    );
+    const distanceFromCenter = Math.hypot(mathPointerPos.x, mathPointerPos.y);
+    const wasActive = this.isInteractionActive;
 
-    // Update active state ONLY if the pointer is near the circle
-    // This allows interaction to "stop" if moving far away, even if touch is still down
-    this.isInteractionActive = distanceFromCenter <= this.radius * 1.3;
+    // Update active state if pointer is near the circle
+    this.isInteractionActive =
+      distanceFromCenter <= this.radius * this.interactionRadiusMultiplier;
 
+    if (wasActive !== this.isInteractionActive) {
+      needsRedraw = true;
+      needsInfoUpdate = true;
+    }
+
+    // Update angle and position if interaction is active
     if (this.isInteractionActive) {
+      // Calculate angle in standard position (0 to 2π)
       let angle = Math.atan2(mathPointerPos.y, mathPointerPos.x);
       if (angle < 0) angle += 2 * Math.PI;
 
+      // Snap to special angles if enabled
       if (this.options.snapToAngles) {
         const closestAngle = this.findClosestSpecialAngle(angle);
-        if (closestAngle) {
-          angle = closestAngle.radians;
-        }
+        if (closestAngle) angle = closestAngle.radians;
       }
-      this.currentAngle = angle;
-      const currentMathPoint = {
-        x: Math.cos(this.currentAngle) * this.radius,
-        y: Math.sin(this.currentAngle) * this.radius,
-      };
-      this.currentPoint = this.mathToCanvas(
-        currentMathPoint.x,
-        currentMathPoint.y
-      );
+
+      // Only update if angle changed significantly
+      if (Math.abs(this.currentAngle - angle) > 0.001) {
+        this.currentAngle = angle;
+
+        // Calculate point on circle
+        const currentMathPoint = {
+          x: Math.cos(this.currentAngle) * this.radius,
+          y: Math.sin(this.currentAngle) * this.radius,
+        };
+        this.currentPoint = this.mathToCanvas(
+          currentMathPoint.x,
+          currentMathPoint.y
+        );
+
+        needsRedraw = true;
+        needsInfoUpdate = true;
+      }
     }
 
-    // Always update info and redraw during movement
-    this.updateInfoPanel();
-    this.draw();
+    // Update UI if needed
+    if (needsInfoUpdate) this.updateInfoPanel();
+    if (needsRedraw) this.draw();
   }
 
   /**
@@ -397,10 +440,9 @@ class UnitCircle {
 
     // Check distance immediately on down event
     const mathPointerPos = this.canvasToMath(pos.x, pos.y);
-    const distanceFromCenter = Math.sqrt(
-      Math.pow(mathPointerPos.x, 2) + Math.pow(mathPointerPos.y, 2)
-    );
-    this.isInteractionActive = distanceFromCenter <= this.radius * 1.3;
+    const distanceFromCenter = Math.hypot(mathPointerPos.x, mathPointerPos.y);
+    this.isInteractionActive =
+      distanceFromCenter <= this.radius * this.interactionRadiusMultiplier;
 
     // Update visuals immediately based on press location
     if (this.isInteractionActive) {
@@ -447,7 +489,7 @@ class UnitCircle {
     if (
       this.selectedPinId !== null &&
       wasActive &&
-      distanceFromCenter <= this.radius * 1.3
+      distanceFromCenter <= this.radius * this.interactionRadiusMultiplier
     ) {
       this.selectedPinId = null;
       this.updatePinnedAnglesList();
@@ -461,7 +503,7 @@ class UnitCircle {
     if (
       this.selectedPinId === null &&
       wasActive &&
-      distanceFromCenter <= this.radius * 1.3
+      distanceFromCenter <= this.radius * this.interactionRadiusMultiplier
     ) {
       if (e.type === "mouseup" || (e.type === "touchend" && !this.touchMoved)) {
         const angleInfo = this.getCurrentAngleInfo();
@@ -627,17 +669,23 @@ class UnitCircle {
    */
   findClosestSpecialAngle(angle) {
     if (!this.options.snapToAngles) return null;
-    let closestAngle = null;
-    let minDifference = this.snapTolerance;
-    for (const specialAngle of this.specialAngles) {
-      let difference = Math.abs(specialAngle.radians - angle);
-      if (difference > Math.PI) difference = 2 * Math.PI - difference;
-      if (difference < minDifference) {
-        minDifference = difference;
-        closestAngle = specialAngle;
-      }
-    }
-    return closestAngle;
+
+    return (
+      this.specialAngles.reduce((closest, specialAngle) => {
+        // Calculate angular difference (accounting for circular wrap-around)
+        let difference = Math.abs(specialAngle.radians - angle);
+        if (difference > Math.PI) difference = 2 * Math.PI - difference;
+
+        // Update closest if this angle is closer than previous closest
+        if (
+          difference < this.snapTolerance &&
+          (!closest || difference < closest.difference)
+        ) {
+          return { angle: specialAngle, difference };
+        }
+        return closest;
+      }, null)?.angle || null
+    );
   }
 
   /**
@@ -685,14 +733,24 @@ class UnitCircle {
    * @returns {number} The reference angle in radians
    */
   calculateReferenceAngle(angle) {
-    let refAngle = angle % (2 * Math.PI);
-    if (refAngle < 0) refAngle += 2 * Math.PI; // Ensure positive
-    if (refAngle >= 0 && refAngle <= Math.PI / 2) return refAngle;
-    if (refAngle > Math.PI / 2 && refAngle <= Math.PI)
-      return Math.PI - refAngle;
-    if (refAngle > Math.PI && refAngle <= (3 * Math.PI) / 2)
-      return refAngle - Math.PI;
-    return 2 * Math.PI - refAngle;
+    // Normalize angle to [0, 2π)
+    const normalizedAngle =
+      ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+    // Calculate reference angle based on quadrant
+    if (normalizedAngle <= Math.PI / 2) {
+      // Quadrant I: angle is already the reference angle
+      return normalizedAngle;
+    } else if (normalizedAngle <= Math.PI) {
+      // Quadrant II: reference angle is π - angle
+      return Math.PI - normalizedAngle;
+    } else if (normalizedAngle <= (3 * Math.PI) / 2) {
+      // Quadrant III: reference angle is angle - π
+      return normalizedAngle - Math.PI;
+    } else {
+      // Quadrant IV: reference angle is 2π - angle
+      return 2 * Math.PI - normalizedAngle;
+    }
   }
 
   /**
@@ -701,18 +759,31 @@ class UnitCircle {
    * @returns {string} The quadrant (I, II, III, IV) or axis
    */
   getQuadrant(angle) {
+    // Normalize angle to [0, 2π)
     const normalizedAngle =
-      ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Ensure [0, 2PI)
-    if (normalizedAngle === 0 || normalizedAngle === Math.PI) return "X-Axis"; // Or handle axes specifically
+      ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+    // Check for special cases (on axes)
+    const tolerance = 1e-10; // Small tolerance for floating-point comparison
+
     if (
-      normalizedAngle === Math.PI / 2 ||
-      normalizedAngle === (3 * Math.PI) / 2
-    )
+      Math.abs(normalizedAngle) < tolerance ||
+      Math.abs(normalizedAngle - Math.PI) < tolerance
+    ) {
+      return "X-Axis";
+    }
+
+    if (
+      Math.abs(normalizedAngle - Math.PI / 2) < tolerance ||
+      Math.abs(normalizedAngle - (3 * Math.PI) / 2) < tolerance
+    ) {
       return "Y-Axis";
-    if (normalizedAngle > 0 && normalizedAngle < Math.PI / 2) return "I";
-    if (normalizedAngle > Math.PI / 2 && normalizedAngle < Math.PI) return "II";
-    if (normalizedAngle > Math.PI && normalizedAngle < (3 * Math.PI) / 2)
-      return "III";
+    }
+
+    // Determine quadrant
+    if (normalizedAngle < Math.PI / 2) return "I";
+    if (normalizedAngle < Math.PI) return "II";
+    if (normalizedAngle < (3 * Math.PI) / 2) return "III";
     return "IV";
   }
 
@@ -816,24 +887,39 @@ class UnitCircle {
   formatRadians(radians) {
     const pi = Math.PI;
     const tolerance = 0.001; // Tolerance for matching fractions
-    const fractions = [2, 3, 4, 6]; // Denominators to check
 
+    // Handle special cases
     if (Math.abs(radians) < tolerance) return "0";
     if (Math.abs(radians - pi) < tolerance) return "π";
     if (Math.abs(radians - 2 * pi) < tolerance) return "2π";
 
-    for (const d of fractions) {
-      for (let n = 1; n < 2 * d; n++) {
-        // Check numerators
-        if (Math.abs(radians - (n * pi) / d) < tolerance) {
-          if (n === 1) return `π/${d}`;
-          // Potential simplification needed here for gcd, e.g. 4pi/6 -> 2pi/3
-          // Basic implementation for now:
-          return `${n}π/${d}`;
-        }
+    // Common fractions to check (numerator/denominator pairs)
+    const fractions = [
+      { num: 1, den: 6 }, // π/6 (30°)
+      { num: 1, den: 4 }, // π/4 (45°)
+      { num: 1, den: 3 }, // π/3 (60°)
+      { num: 1, den: 2 }, // π/2 (90°)
+      { num: 2, den: 3 }, // 2π/3 (120°)
+      { num: 3, den: 4 }, // 3π/4 (135°)
+      { num: 5, den: 6 }, // 5π/6 (150°)
+      { num: 7, den: 6 }, // 7π/6 (210°)
+      { num: 5, den: 4 }, // 5π/4 (225°)
+      { num: 4, den: 3 }, // 4π/3 (240°)
+      { num: 3, den: 2 }, // 3π/2 (270°)
+      { num: 5, den: 3 }, // 5π/3 (300°)
+      { num: 7, den: 4 }, // 7π/4 (315°)
+      { num: 11, den: 6 }, // 11π/6 (330°)
+    ];
+
+    // Check each fraction
+    for (const { num, den } of fractions) {
+      const fracValue = (num * pi) / den;
+      if (Math.abs(radians - fracValue) < tolerance) {
+        return num === 1 ? `π/${den}` : `${num}π/${den}`;
       }
     }
-    return radians.toFixed(2); // Fallback
+
+    return radians.toFixed(2); // Fallback for non-exact values
   }
 
   // ===== PINNED ANGLE LIST MANAGEMENT =====
@@ -910,35 +996,30 @@ class UnitCircle {
     let nearestId = null;
     let minDistance = this.pinClickThreshold;
 
-    // First check if we're near any pinned angle point
+    // Check each pinned angle
     for (const pin of this.pinnedAngles) {
-      const distance = Math.sqrt(
-        Math.pow(pin.point.x - x, 2) + Math.pow(pin.point.y - y, 2)
+      // First check distance to the endpoint (higher priority)
+      const pointDistance = Math.hypot(pin.point.x - x, pin.point.y - y);
+
+      if (pointDistance < minDistance) {
+        minDistance = pointDistance;
+        nearestId = pin.id;
+        continue; // Skip line check if point is close enough
+      }
+
+      // If endpoint is not close enough, check distance to the line
+      const lineDistance = this.distanceToLineSegment(
+        this.centerX,
+        this.centerY, // Line start (center)
+        pin.point.x,
+        pin.point.y, // Line end (pin point)
+        x,
+        y // Test point
       );
 
-      if (distance < minDistance) {
-        minDistance = distance;
+      if (lineDistance < minDistance) {
+        minDistance = lineDistance;
         nearestId = pin.id;
-      }
-    }
-
-    // If no point is close enough, check if we're near any pinned angle line
-    if (nearestId === null) {
-      for (const pin of this.pinnedAngles) {
-        // Calculate distance from point to line segment (center to pin point)
-        const distance = this.distanceToLineSegment(
-          this.centerX,
-          this.centerY, // Line start (center)
-          pin.point.x,
-          pin.point.y, // Line end (pin point)
-          x,
-          y // Test point
-        );
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestId = pin.id;
-        }
       }
     }
 
@@ -957,30 +1038,22 @@ class UnitCircle {
    */
   distanceToLineSegment(x1, y1, x2, y2, px, py) {
     // Calculate the squared length of the line segment
-    const lengthSquared = Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+    const lengthSquared = (x2 - x1) ** 2 + (y2 - y1) ** 2;
 
     // If the line segment is actually a point, return distance to that point
-    if (lengthSquared === 0) {
-      return Math.sqrt(Math.pow(px - x1, 2) + Math.pow(py - y1, 2));
-    }
+    if (lengthSquared === 0) return Math.hypot(px - x1, py - y1);
 
-    // Calculate projection of point onto line segment
-    const t = Math.max(
-      0,
-      Math.min(
-        1,
-        ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / lengthSquared
-      )
-    );
+    // Calculate projection parameter (t) of point onto the infinite line
+    // t < 0: closest to start point, t > 1: closest to end point, 0 <= t <= 1: closest to segment
+    const dotProduct = (px - x1) * (x2 - x1) + (py - y1) * (y2 - y1);
+    const t = Math.max(0, Math.min(1, dotProduct / lengthSquared));
 
     // Calculate closest point on line segment
     const projectionX = x1 + t * (x2 - x1);
     const projectionY = y1 + t * (y2 - y1);
 
     // Return distance to closest point
-    return Math.sqrt(
-      Math.pow(px - projectionX, 2) + Math.pow(py - projectionY, 2)
-    );
+    return Math.hypot(px - projectionX, py - projectionY);
   }
 
   // ===== DRAWING FUNCTIONS =====
@@ -1545,8 +1618,14 @@ class UnitCircle {
    * @param {object} angleInfo - Angle information object
    * @param {number} canvasPointX - X coordinate in canvas space
    * @param {number} canvasPointY - Y coordinate in canvas space
+   * @param {boolean} isSelected - Whether this is a selected angle (affects styling)
    */
-  drawHoverAngleLabel(angleInfo, canvasPointX, canvasPointY) {
+  drawHoverAngleLabel(
+    angleInfo,
+    canvasPointX,
+    canvasPointY,
+    isSelected = false
+  ) {
     // angleInfo contains MATH angle/degrees
     const angleText =
       angleInfo.isExact && angleInfo.exactCoordsStr
@@ -1554,7 +1633,7 @@ class UnitCircle {
         : `(${angleInfo.coords.x.toFixed(2)}, ${angleInfo.coords.y.toFixed(
             2
           )})`;
-    const offset = 30;
+    const offset = isSelected ? 35 : 30; // Slightly larger offset for selected angles
 
     // Calculate offset direction using the MATH angle
     const mathVectorX = Math.cos(angleInfo.radians);
@@ -1565,9 +1644,11 @@ class UnitCircle {
     const labelX = canvasPointX + mathVectorX * offset;
     const labelY = canvasPointY - mathVectorY * offset; // Use MINUS mathVectorY
 
-    // Draw background
-    this.ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    this.ctx.font = "14px Arial";
+    // Draw background with slightly different opacity for selected angles
+    this.ctx.fillStyle = isSelected
+      ? "rgba(255, 255, 255, 0.9)"
+      : "rgba(255, 255, 255, 0.8)";
+    this.ctx.font = isSelected ? "bold 14px Arial" : "14px Arial";
     const textWidth = this.ctx.measureText(angleText).width;
     this.ctx.fillRect(
       labelX - textWidth / 2 - 4,
@@ -1591,9 +1672,10 @@ class UnitCircle {
    * Draw reference triangle
    * @param {number} canvasPointX - X coordinate in canvas space
    * @param {number} canvasPointY - Y coordinate in canvas space
+   * @param {string} color - Color to use for the triangle (defaults to hover color)
    */
-  drawReferenceTriangle(canvasPointX, canvasPointY) {
-    this.ctx.strokeStyle = this.colors.hover;
+  drawReferenceTriangle(canvasPointX, canvasPointY, color = null) {
+    this.ctx.strokeStyle = color || this.colors.hover;
     this.ctx.lineWidth = 1;
     this.ctx.setLineDash([5, 3]);
 
